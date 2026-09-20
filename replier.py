@@ -73,6 +73,12 @@ class MentionReplier:
             )
         except Exception:
             formatted = template
+
+        if self.config.parse_mode.upper() == "HTML":
+            import re
+            # Auto-convert Markdown link syntax [text](url) to HTML <a href="url">text</a>
+            formatted = re.sub(r"\[([^\]]+)\]\((https?://[^\)]+)\)", r'<a href="\2">\1</a>', formatted)
+
         return formatted
 
     async def handle_guest_message(self, guest_msg: Dict[str, Any]) -> None:

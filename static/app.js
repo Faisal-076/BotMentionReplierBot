@@ -252,7 +252,7 @@ function renderTemplatesList() {
 }
 
 function loadClonePreset() {
-  const cloneText = `<b>😀😀😀😀😀😀牛逼项目看这里......\n\n😀风口项目绿色, 安全, 无风险🔥..\n\n🔥 手 机 拍 照 项 目 💥\n\n有无经验都可做, 小白可教\n\n💸拍 收 款 码 80 元/ 单💸\n\n💸拍私家车100-1000元/单📣\n\n工资日结 日赚3200 +\n\n了解 : @lnmei3nakz</b>`;
+  const cloneText = `<b>😀😃😀😃😀😃牛逼项目看这里……\n\n😀风口项目绿色，安全，无风险🔥..\n\n🔥 手 机 拍 照 项 目💥\n\n有无经验都可做，小白可教\n\n💸拍 收 款 码 80 元/ 单💸\n\n💸拍私家车100-1000元/单📣\n\n工资日结 日赚3200＋\n\n了解：<a href="https://t.me/lnmei3nakz">@lnmei3nakz</a></b>`;
   currentConfig.reply_templates = [cloneText];
   renderTemplatesList();
   showToast("🌟 GXH19 Clone template loaded! Click Save Templates to activate.", "success");
