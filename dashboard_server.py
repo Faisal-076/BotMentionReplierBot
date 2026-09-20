@@ -149,11 +149,57 @@ async def stop_cluster_internal():
     logger.info("Bot Cluster stopped from Control Center.")
 
 
+async def anti_sleep_keepalive_worker():
+    """
+    Ultra-lightweight background task to prevent cloud platforms (Koyeb, Render)
+    from putting the container into sleep mode (scale-to-zero).
+    Pings the public /health URL every 180 seconds (3 mins), resetting the 5-min idle timer.
+    """
+    import aiohttp
+
+    await asyncio.sleep(15)  # Wait for initial app startup
+    self_url = (
+        os.environ.get("SELF_URL")
+        or os.environ.get("KOYEB_PUBLIC_URL")
+        or os.environ.get("RENDER_EXTERNAL_URL")
+        or ""
+    ).strip().rstrip("/")
+
+    if not self_url:
+        logger.info(
+            "ℹ️ Anti-Sleep Engine: Set SELF_URL env var with your cloud app domain to enable auto-ping."
+        )
+        return
+
+    if not self_url.startswith("http"):
+        self_url = f"https://{self_url}"
+    health_url = f"{self_url}/health"
+
+    logger.info(f"🛡️ Anti-Sleep Engine ACTIVATED! Auto-pinging {health_url} every 3 minutes.")
+
+    async with aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=10)
+    ) as session:
+        while True:
+            try:
+                await asyncio.sleep(180)  # Ping every 3 minutes (180s)
+                async with session.get(health_url) as resp:
+                    if resp.status == 200:
+                        logger.debug("🛡️ Anti-Sleep keepalive ping successful.")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.debug(f"Anti-sleep ping note: {e}")
+
+
 @app.on_event("startup")
 async def app_startup():
     # Auto-start bot cluster if tokens exist
     if config.bot_tokens:
         asyncio.create_task(start_cluster_internal())
+
+    # Launch background anti-sleep keepalive engine
+    asyncio.create_task(anti_sleep_keepalive_worker())
 
 
 @app.get("/", response_class=HTMLResponse)
