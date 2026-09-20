@@ -210,6 +210,15 @@ async def serve_dashboard():
     return HTMLResponse(index_file.read_text(encoding="utf-8"))
 
 
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "is_running": state.is_running,
+    }
+
+
 @app.get("/api/status")
 async def get_status():
     uptime = 0

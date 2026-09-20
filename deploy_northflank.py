@@ -9,6 +9,13 @@ import sys
 from pathlib import Path
 import requests
 
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 NORTHFLANK_API_TOKEN = os.environ.get(
     "NORTHFLANK_API_TOKEN",
     "nf-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1dWlkIjoiNDAzMDM1MjItN2M2ZC00ZDNiLWJmYTAtYzdiYWY0MDQzZDg1IiwiZW50aXR5SWQiOiI2YWFmZjdmNjVkMTE4MjcyMDUxMmU1ZDUiLCJlbnRpdHlUeXBlIjoidGVhbSIsInRva2VuSWQiOiI2YWFmZjhmMTVkMTE4MjcyMDUxMmU1ZTEiLCJ0b2tlbkludGVybmFsSWQiOiJib3RtZW50aW9ucmVwbGllcmJvdGFwaSIsInJvbGVJZCI6IjZhYWZmN2Y3NWQxMTgyNzIwNTEyZTVkNiIsInJvbGVFbnRpdHlJZCI6IjZhYWZmN2Y2NWQxMTgyNzIwNTEyZTVkNSIsInJvbGVFbnRpdHlUeXBlIjoidGVhbSIsInJvbGVJbnRlcm5hbElkIjoib3duZXIiLCJ0eXBlIjoicmJhYyIsImlhdCI6MTc4OTkxNzQyNX0.0LKiwXMj95ghi6gJEFNCF7WSH_zp3n-sZuZCF6juT5Q",
@@ -110,17 +117,18 @@ def deploy():
         # 4. Set Environment Variables
         print(f"\n[3/3] Setting Environment Variables...")
         env_payload = {
-            "variables": {
+            "runtimeEnvironment": {
                 "BOT_TOKENS": bot_tokens,
                 "REPLY_MODE": "both",
                 "PARSE_MODE": "HTML",
                 "REPLY_DELAY": "0.0",
                 "PORT": "8000",
+                "SELF_URL": f"https://web--{svc_id}--f4gz4hq5p8j7.code.run",
                 "REPLY_TEMPLATES": reply_templates,
             }
         }
         env_res = requests.post(
-            f"{BASE_URL}/projects/{PROJECT_ID}/services/combined/{svc_id}/environment",
+            f"{BASE_URL}/projects/{PROJECT_ID}/services/{svc_id}/runtime-environment",
             headers=headers,
             json=env_payload,
         )
