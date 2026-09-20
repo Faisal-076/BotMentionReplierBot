@@ -219,6 +219,111 @@ async def health_check():
     }
 
 
+@app.get("/api/benchmark")
+async def run_latency_benchmark():
+    """
+    Executes deep network and Telegram Bot API latency measurements
+    directly from this cloud container to api.telegram.org.
+    """
+    import socket
+    import ssl
+    import time
+    import statistics
+    import aiohttp
+
+    target_host = "api.telegram.org"
+    target_port = 443
+
+    # 1. DNS Resolution (5 iterations)
+    dns_times = []
+    resolved_ip = "unknown"
+    for _ in range(5):
+        t0 = time.perf_counter()
+        try:
+            addrs = socket.getaddrinfo(target_host, target_port)
+            dns_times.append((time.perf_counter() - t0) * 1000)
+            resolved_ip = addrs[0][4][0]
+        except Exception:
+            pass
+
+    # 2. TCP Handshake to api.telegram.org (5 iterations)
+    tcp_times = []
+    for _ in range(5):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(3.0)
+        t0 = time.perf_counter()
+        try:
+            s.connect((resolved_ip, target_port))
+            tcp_times.append((time.perf_counter() - t0) * 1000)
+        except Exception:
+            pass
+        finally:
+            s.close()
+
+    # 3. TLS Handshake (5 iterations)
+    tls_times = []
+    ssl_context = ssl.create_default_context()
+    for _ in range(5):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(3.0)
+        try:
+            s.connect((resolved_ip, target_port))
+            t0 = time.perf_counter()
+            ss = ssl_context.wrap_socket(s, server_hostname=target_host)
+            tls_times.append((time.perf_counter() - t0) * 1000)
+            ss.close()
+        except Exception:
+            s.close()
+
+    # 4. HTTPS Round Trip Time (Warm keepalive vs cold connection)
+    http_times = []
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+        for _ in range(5):
+            t0 = time.perf_counter()
+            try:
+                async with session.get(f"https://{target_host}/") as resp:
+                    await resp.read()
+                http_times.append((time.perf_counter() - t0) * 1000)
+            except Exception:
+                pass
+
+    # 5. Geolocation / IP details
+    geo_info = {}
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
+            async with session.get("http://ip-api.com/json/") as resp:
+                if resp.status == 200:
+                    geo_info = await resp.json()
+    except Exception:
+        pass
+
+    def calc_stats(arr):
+        if not arr:
+            return {"min_ms": 0, "avg_ms": 0, "max_ms": 0, "samples": []}
+        return {
+            "min_ms": round(min(arr), 2),
+            "avg_ms": round(statistics.mean(arr), 2),
+            "max_ms": round(max(arr), 2),
+            "samples": [round(x, 2) for x in arr],
+        }
+
+    return {
+        "target": target_host,
+        "resolved_ip": resolved_ip,
+        "server_env": {
+            "platform": "Render" if os.environ.get("RENDER") else ("Northflank" if os.environ.get("PORT") and not os.environ.get("RENDER") else "Local/Cloud"),
+            "country": geo_info.get("country", "Unknown"),
+            "city": geo_info.get("city", "Unknown"),
+            "isp": geo_info.get("isp", "Unknown"),
+            "public_ip": geo_info.get("query", "Unknown"),
+        },
+        "dns_resolution": calc_stats(dns_times),
+        "tcp_handshake": calc_stats(tcp_times),
+        "tls_handshake": calc_stats(tls_times),
+        "http_rtt_keepalive": calc_stats(http_times),
+    }
+
+
 @app.get("/api/status")
 async def get_status():
     uptime = 0
