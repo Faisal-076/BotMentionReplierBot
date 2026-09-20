@@ -60,7 +60,7 @@ class SingleBotRunner:
                 updates = await self.client.get_updates(
                     offset=offset,
                     timeout=self.config.poll_timeout,
-                    allowed_updates=["guest_message", "message", "edited_message"],
+                    allowed_updates=["guest_message", "message", "edited_message", "inline_query"],
                 )
 
                 for update in updates:
