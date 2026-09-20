@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telegram Bot Mention Replier | Control Center</title>
+  <meta name="description" content="Modern management dashboard for Telegram Guest Mode and Multi-Bot Cluster Replier">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo-badge">
+          <span class="logo-icon">⚡</span>
+          <div class="logo-text">
+            <h1>MentionReplier</h1>
+            <span class="logo-sub">Cluster Control Center</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <div class="status-chip" id="cluster-status-chip">
+          <span class="pulse-dot" id="status-dot"></span>
+          <span id="cluster-status-text">Checking...</span>
+        </div>
+        <div class="uptime-chip">
+          <span class="chip-label">Uptime:</span>
+          <span id="cluster-uptime" class="chip-val">0s</span>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <button id="btn-start-cluster" class="btn btn-success btn-sm" onclick="startCluster()">▶ Start</button>
+        <button id="btn-stop-cluster" class="btn btn-danger btn-sm" onclick="stopCluster()">⏹ Stop</button>
+        <button id="btn-restart-cluster" class="btn btn-secondary btn-sm" onclick="restartCluster()">🔄 Restart</button>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="app-main">
+      <!-- Navigation Tabs -->
+      <nav class="nav-tabs">
+        <button class="tab-btn active" id="tab-btn-overview" onclick="switchTab('overview')">
+          <span>📊</span> Overview
+        </button>
+        <button class="tab-btn" id="tab-btn-tokens" onclick="switchTab('tokens')">
+          <span>🤖</span> Bot Tokens
+        </button>
+        <button class="tab-btn" id="tab-btn-templates" onclick="switchTab('templates')">
+          <span>💬</span> Reply Templates
+        </button>
+        <button class="tab-btn" id="tab-btn-settings" onclick="switchTab('settings')">
+          <span>⚙️</span> Settings
+        </button>
+        <button class="tab-btn" id="tab-btn-logs" onclick="switchTab('logs')">
+          <span>📜</span> Live Activity
+        </button>
+      </nav>
+
+      <!-- TAB: Overview -->
+      <section id="tab-overview" class="tab-content active">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon-bg">🤖</div>
+            <div class="stat-info">
+              <span class="stat-label">Active Bots</span>
+              <h2 id="stat-active-bots" class="stat-val">0</h2>
+              <span id="stat-configured-tokens" class="stat-sub">0 tokens configured</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon-bg">🎯</div>
+            <div class="stat-info">
+              <span class="stat-label">Reply Mode</span>
+              <h2 id="stat-reply-mode" class="stat-val uppercase">both</h2>
+              <span class="stat-sub">Guest + Member Mentions</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon-bg">💬</div>
+            <div class="stat-info">
+              <span class="stat-label">Templates</span>
+              <h2 id="stat-templates-count" class="stat-val">0</h2>
+              <span class="stat-sub">Randomly cycled on reply</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon-bg">⚡</div>
+            <div class="stat-info">
+              <span class="stat-label">Latency Engine</span>
+              <h2 class="stat-val text-accent">Ultra-Fast</h2>
+              <span class="stat-sub">TCP Pooling & DNS Cache</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mt-4">
+          <div class="card-header">
+            <h3>Connected Bot Instances</h3>
+            <button class="btn btn-outline btn-xs" onclick="verifyTokens()">🔍 Verify with Telegram</button>
+          </div>
+          <div class="card-body">
+            <div id="bots-list-container" class="bots-grid">
+              <p class="text-muted">Loading bot instances...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: Bot Tokens -->
+      <section id="tab-tokens" class="tab-content">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3>Manage Telegram Bot Tokens</h3>
+              <p class="card-subtitle">Run 1, 3, or more bots in parallel cluster. All added bots will reply simultaneously when mentioned.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="showAddTokenModal()">+ Add New Bot Token</button>
+          </div>
+          <div class="card-body">
+            <div class="tokens-table-wrap">
+              <table class="tokens-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Token Preview</th>
+                    <th>Bot Username</th>
+                    <th>Guest Mode</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="tokens-table-body">
+                  <tr><td colspan="6" class="text-center text-muted">Loading tokens...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: Reply Templates -->
+      <section id="tab-templates" class="tab-content">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3>Customize Reply Templates</h3>
+              <p class="card-subtitle">Every time your bot is mentioned, it randomly chooses one of these templates to respond.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="addNewTemplate()">+ Add Template</button>
+          </div>
+          <div class="card-body">
+            <div class="template-chips-bar">
+              <span class="chips-label">Click to insert placeholder:</span>
+              <button type="button" class="var-chip" onclick="insertVariable('{first_name}')">{first_name}</button>
+              <button type="button" class="var-chip" onclick="insertVariable('{username}')">{username}</button>
+              <button type="button" class="var-chip" onclick="insertVariable('{bot_name}')">{bot_name}</button>
+              <button type="button" class="var-chip" onclick="insertVariable('{chat_title}')">{chat_title}</button>
+              <button type="button" class="var-chip" onclick="insertVariable('{date}')">{date}</button>
+            </div>
+
+            <div id="templates-list-container" class="templates-list">
+              <!-- Templates injected by JS -->
+            </div>
+
+            <div class="form-actions mt-4">
+              <button id="btn-save-templates" class="btn btn-success" onclick="saveConfiguration()">💾 Save Templates</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: Settings -->
+      <section id="tab-settings" class="tab-content">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3>Behavior & Response Settings</h3>
+              <p class="card-subtitle">Tune response modes, parsing engine, delays, and link previews.</p>
+            </div>
+          </div>
+          <div class="card-body form-grid">
+            <div class="form-group">
+              <label for="setting-reply-mode">Reply Mode</label>
+              <select id="setting-reply-mode" class="form-control">
+                <option value="both">Both (Guest Mode + Regular Group Member Mentions) [Recommended]</option>
+                <option value="guest">Guest Mode Only (Only when mentioned without being in group)</option>
+                <option value="member">Member Mode Only (Only in groups where bot is a member)</option>
+              </select>
+              <span class="field-hint">Defines when the bot triggers responses.</span>
+            </div>
+
+            <div class="form-group">
+              <label for="setting-parse-mode">Parse Mode</label>
+              <select id="setting-parse-mode" class="form-control">
+                <option value="HTML">HTML (e.g. &lt;b&gt;bold&lt;/b&gt;, &lt;i&gt;italic&lt;/i&gt;)</option>
+                <option value="MarkdownV2">MarkdownV2 (*bold*, _italic_)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="setting-reply-delay">Reply Delay (Seconds)</label>
+              <div class="delay-slider-wrap">
+                <input type="range" id="setting-reply-delay" min="0.0" max="5.0" step="0.1" value="0.0" class="slider" oninput="updateDelayLabel(this.value)">
+                <span id="delay-label" class="slider-val">0.0s (Instant)</span>
+              </div>
+              <span class="field-hint">0.0s for sub-second responses. Increase slightly if you want human-like timing.</span>
+            </div>
+
+            <div class="form-group">
+              <label for="setting-disable-preview">Disable Web Page Previews</label>
+              <div class="toggle-wrap">
+                <label class="switch">
+                  <input type="checkbox" id="setting-disable-preview">
+                  <span class="slider-toggle round"></span>
+                </label>
+                <span class="toggle-text">Prevent Telegram from generating large link previews in replies</span>
+              </div>
+            </div>
+
+            <div class="form-actions mt-4">
+              <button id="btn-save-settings" class="btn btn-success" onclick="saveConfiguration()">💾 Save All Settings</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: Live Activity Logs -->
+      <section id="tab-logs" class="tab-content">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3>Live Activity & Mention Stream</h3>
+              <p class="card-subtitle">Real-time terminal output of incoming mentions and outgoing replies.</p>
+            </div>
+            <div class="log-controls">
+              <label class="auto-scroll-toggle">
+                <input type="checkbox" id="auto-scroll-check" checked> Auto-scroll
+              </label>
+              <button class="btn btn-outline btn-xs" onclick="clearLogs()">Clear</button>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div id="live-log-console" class="log-console">
+              <div class="log-entry log-info">[SYSTEM] Connected to Live Activity Monitor. Ready for mentions...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Modal: Add Bot Token -->
+    <div id="modal-add-token" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Add New Telegram Bot Token</h3>
+          <button class="modal-close-btn" onclick="hideAddTokenModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="input-new-token">Telegram Bot Token</label>
+            <input type="text" id="input-new-token" class="form-control" placeholder="1234567890:AAH_ExampleToken...">
+            <span class="field-hint">Obtain from <a href="https://t.me/BotFather" target="_blank">@BotFather</a> on Telegram. Make sure Guest Mode is ON!</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="hideAddTokenModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="submitNewToken()">Add Bot</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
