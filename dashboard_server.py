@@ -7,21 +7,34 @@ from collections import deque
 from datetime import datetime, timezone
 import logging
 import os
+import hashlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+try:
+    import orjson
+    from fastapi.responses import ORJSONResponse
+    DEFAULT_RESP_CLASS = ORJSONResponse
+except ImportError:
+    orjson = None
+    DEFAULT_RESP_CLASS = JSONResponse
+
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from cluster import BotCluster
 from config import BotConfig, config
+from replier import MentionReplier
 from telegram_client import TelegramClient
 
 BASE_DIR = Path(__file__).parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
 
-app = FastAPI(title="Telegram Bot Mention Replier Control Center")
+app = FastAPI(
+    title="Telegram Bot Mention Replier Control Center",
+    default_response_class=DEFAULT_RESP_CLASS,
+)
 
 # Ensure static and templates directories exist
 TEMPLATES_DIR.mkdir(exist_ok=True)
@@ -66,6 +79,9 @@ class ClusterState:
         self.is_running: bool = False
         self.start_time: Optional[datetime] = None
         self.total_mentions_handled: int = 0
+        self.mode: str = "webhook"  # "webhook" or "polling"
+        self.webhook_clients: Dict[str, TelegramClient] = {}
+        self.webhook_repliers: Dict[str, Any] = {}
 
 
 state = ClusterState()
@@ -116,7 +132,7 @@ WEBHOOK_URL_BASE=
 
 
 async def start_cluster_internal():
-    """Starts the bot cluster task."""
+    """Starts the bot cluster in Webhook (Zero-Lag) or Polling mode."""
     if state.is_running:
         return
     try:
@@ -125,28 +141,100 @@ async def start_cluster_internal():
         logger.error(f"Cannot start cluster: {e}")
         return
 
-    state.cluster = BotCluster(config)
-    state.is_running = True
-    state.start_time = datetime.now(timezone.utc)
-    state.task = asyncio.create_task(state.cluster.start())
-    logger.info("Bot Cluster started from Control Center.")
+    self_url = (
+        os.environ.get("SELF_URL")
+        or os.environ.get("RENDER_EXTERNAL_URL")
+        or os.environ.get("KOYEB_PUBLIC_URL")
+        or ""
+    ).strip().rstrip("/")
+    if self_url and not self_url.startswith("http"):
+        self_url = f"https://{self_url}"
+
+    configured_mode = os.environ.get(
+        "UPDATE_MODE", "webhook" if self_url else "polling"
+    ).lower()
+
+    if configured_mode == "webhook" and self_url:
+        state.mode = "webhook"
+        state.is_running = True
+        state.start_time = datetime.now(timezone.utc)
+        logger.info(f"⚡ Starting Supersonic Webhook Engine on {self_url}...")
+
+        state.webhook_clients.clear()
+        state.webhook_repliers.clear()
+
+        for token in config.bot_tokens:
+            token_hash = hashlib.sha256(token.encode()).hexdigest()[:16]
+            client = TelegramClient(token)
+            me = await client.get_me()
+            if me.get("ok"):
+                username = me["result"].get("username", "Unknown")
+                guest_supported = me["result"].get("supports_guest_queries", False)
+                replier = MentionReplier(client, config)
+                state.webhook_clients[token_hash] = client
+                state.webhook_repliers[token_hash] = (
+                    replier,
+                    username,
+                    guest_supported,
+                )
+
+                webhook_url = f"{self_url}/webhook/{token_hash}"
+                res = await client.set_webhook(
+                    url=webhook_url,
+                    allowed_updates=[
+                        "guest_message",
+                        "message",
+                        "edited_message",
+                        "inline_query",
+                    ],
+                    drop_pending_updates=False,
+                )
+                if res.get("ok"):
+                    logger.info(
+                        f"🚀 [@{username}] Webhook active -> {webhook_url} (Guest Mode: {guest_supported})"
+                    )
+                else:
+                    logger.error(
+                        f"❌ Failed to set webhook for @{username}: {res.get('description')}"
+                    )
+        logger.info(
+            f"⚡ Supersonic Webhook Cluster started with {len(state.webhook_repliers)} bot(s)."
+        )
+    else:
+        state.mode = "polling"
+        state.cluster = BotCluster(config)
+        state.is_running = True
+        state.start_time = datetime.now(timezone.utc)
+        state.task = asyncio.create_task(state.cluster.start())
+        logger.info("Bot Cluster started in Long Polling mode.")
 
 
 async def stop_cluster_internal():
-    """Stops the running bot cluster."""
+    """Stops the running bot cluster and clears webhooks if in webhook mode."""
     if not state.is_running:
         return
     state.is_running = False
-    if state.cluster:
-        for runner in state.cluster.runners:
-            runner.stop()
-    if state.task:
-        state.task.cancel()
-        try:
-            await state.task
-        except asyncio.CancelledError:
-            pass
-    logger.info("Bot Cluster stopped from Control Center.")
+    if state.mode == "webhook":
+        for client in state.webhook_clients.values():
+            try:
+                await client.delete_webhook(drop_pending_updates=False)
+                await client.close()
+            except Exception:
+                pass
+        state.webhook_clients.clear()
+        state.webhook_repliers.clear()
+        logger.info("Webhook Bot Cluster stopped and webhooks cleared.")
+    else:
+        if state.cluster:
+            for runner in state.cluster.runners:
+                runner.stop()
+        if state.task:
+            state.task.cancel()
+            try:
+                await state.task
+            except asyncio.CancelledError:
+                pass
+        logger.info("Bot Cluster stopped from Control Center.")
 
 
 async def anti_sleep_keepalive_worker():
@@ -234,7 +322,34 @@ async def health_check():
         "status": "ok",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "is_running": state.is_running,
+        "mode": state.mode,
     }
+
+
+@app.post("/webhook/{token_hash}")
+async def handle_incoming_telegram_webhook(token_hash: str, request: Request):
+    """
+    Sub-millisecond Webhook Ingestion Engine.
+    Parses incoming Telegram update in C/Rust (orjson) and fires MentionReplier in zero-latency task.
+    """
+    if token_hash not in state.webhook_repliers:
+        raise HTTPException(status_code=404, detail="Webhook endpoint not found")
+
+    body = await request.body()
+    try:
+        update = orjson.loads(body) if orjson else json.loads(body.decode("utf-8"))
+    except Exception:
+        import json as py_json
+
+        try:
+            update = py_json.loads(body.decode("utf-8"))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    replier, _, _ = state.webhook_repliers[token_hash]
+    # Zero-delay concurrent execution
+    asyncio.create_task(replier.process_update(update))
+    return {"ok": True}
 
 
 @app.get("/api/benchmark")
@@ -349,7 +464,16 @@ async def get_status():
         uptime = int((datetime.now(timezone.utc) - state.start_time).total_seconds())
 
     runners_info = []
-    if state.cluster and state.cluster.runners:
+    if state.mode == "webhook":
+        for replier, uname, guest_ok in state.webhook_repliers.values():
+            runners_info.append(
+                {
+                    "username": uname,
+                    "is_running": state.is_running,
+                    "guest_supported": guest_ok,
+                }
+            )
+    elif state.cluster and state.cluster.runners:
         for r in state.cluster.runners:
             runners_info.append(
                 {
@@ -363,6 +487,7 @@ async def get_status():
 
     return {
         "is_running": state.is_running,
+        "mode": state.mode,
         "uptime_seconds": uptime,
         "active_bots_count": len(runners_info),
         "bots": runners_info,

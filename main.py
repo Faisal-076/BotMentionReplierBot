@@ -16,6 +16,13 @@ if sys.platform == "win32":
             sys.stderr.reconfigure(encoding="utf-8")
     except Exception:
         pass
+else:
+    # High-performance event loop for Linux production containers
+    try:
+        import uvloop
+        uvloop.install()
+    except Exception:
+        pass
 
 from config import config
 from cluster import BotCluster
@@ -122,12 +129,16 @@ def run_dashboard():
     logger.info(
         f"🚀 Starting Web UI Dashboard Control Center on http://{config.webhook_host}:{port}"
     )
-    uvicorn.run(
-        "dashboard_server:app",
-        host=config.webhook_host,
-        port=port,
-        reload=False,
-    )
+    uvicorn_kwargs = {
+        "app": "dashboard_server:app",
+        "host": config.webhook_host,
+        "port": port,
+        "reload": False,
+    }
+    if sys.platform != "win32":
+        uvicorn_kwargs["loop"] = "uvloop"
+        uvicorn_kwargs["http"] = "httptools"
+    uvicorn.run(**uvicorn_kwargs)
 
 
 if __name__ == "__main__":
