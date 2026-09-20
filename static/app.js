@@ -272,6 +272,30 @@ function deleteTemplate(index) {
   renderTemplatesList();
 }
 
+function convertCurrentToBigFont() {
+  if (!lastFocusedTextarea) {
+    lastFocusedTextarea = document.querySelector(".template-textarea");
+  }
+  if (!lastFocusedTextarea) return;
+  let val = lastFocusedTextarea.value.trim();
+  if (!val) {
+    showToast("⚠️ অনুগ্রহ করে আগে বক্সে মেসেজ পেস্ট করুন!", "error");
+    return;
+  }
+  let lines = val.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+  let formatted = lines
+    .map((line) => {
+      if (line.toLowerCase().startsWith("<h")) return line;
+      line = line.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2">$1</a>');
+      return `<h1>${line}</h1>`;
+    })
+    .join("\n");
+
+  lastFocusedTextarea.value = formatted;
+  lastFocusedTextarea.dispatchEvent(new Event("input"));
+  showToast("✨ লেখাটিকে স্বয়ংক্রিয়ভাবে বড় হেডিং ফন্টে রূপান্তর করা হয়েছে! এবার Save Templates এ ক্লিক করুন।", "success");
+}
+
 function insertVariable(varName) {
   if (!lastFocusedTextarea) {
     lastFocusedTextarea = document.querySelector(".template-textarea");

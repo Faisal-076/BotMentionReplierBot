@@ -79,6 +79,12 @@ class MentionReplier:
             # Auto-convert Markdown link syntax [text](url) to HTML <a href="url">text</a>
             formatted = re.sub(r"\[([^\]]+)\]\((https?://[^\)]+)\)", r'<a href="\2">\1</a>', formatted)
 
+            # Auto Big Font mode: automatically wrap plain text lines in <h1> headings
+            if getattr(self.config, "auto_big_font", True):
+                if not re.search(r"</?(?:h[1-6]|b|strong|i|em|code|pre|blockquote)>", formatted, re.IGNORECASE):
+                    lines = [line.strip() for line in formatted.splitlines() if line.strip()]
+                    formatted = "\n".join([f"<h1>{line}</h1>" for line in lines])
+
         return formatted
 
     async def handle_guest_message(self, guest_msg: Dict[str, Any]) -> None:

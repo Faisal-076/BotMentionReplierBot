@@ -23,6 +23,9 @@ class BotConfig:
             os.getenv("DISABLE_WEB_PAGE_PREVIEW", "false").lower() in ("true", "1", "yes")
         )
         self.reply_delay: float = float(os.getenv("REPLY_DELAY", "0.0"))
+        self.auto_big_font: bool = (
+            os.getenv("AUTO_BIG_FONT", "true").lower() in ("true", "1", "yes")
+        )
 
         templates_raw = os.getenv(
             "REPLY_TEMPLATES",
