@@ -151,23 +151,24 @@ async def stop_cluster_internal():
 
 async def anti_sleep_keepalive_worker():
     """
-    Ultra-lightweight background task to prevent cloud platforms (Koyeb, Render)
-    from putting the container into sleep mode (scale-to-zero).
-    Pings the public /health URL every 180 seconds (3 mins), resetting the 5-min idle timer.
+    Maximum-reliability Anti-Sleep Engine.
+    Dispatches lightweight asynchronous keepalive pings every 90 seconds (1.5 mins)
+    to the public cloud domain (Render / Northflank), preventing sleep mode (scale-to-zero)
+    and eliminating cold-start latency.
     """
     import aiohttp
 
-    await asyncio.sleep(15)  # Wait for initial app startup
+    await asyncio.sleep(10)  # Short initial wait for uvicorn to bind
     self_url = (
         os.environ.get("SELF_URL")
-        or os.environ.get("KOYEB_PUBLIC_URL")
         or os.environ.get("RENDER_EXTERNAL_URL")
+        or os.environ.get("KOYEB_PUBLIC_URL")
         or ""
     ).strip().rstrip("/")
 
     if not self_url:
         logger.info(
-            "ℹ️ Anti-Sleep Engine: Set SELF_URL env var with your cloud app domain to enable auto-ping."
+            "ℹ️ Anti-Sleep Engine: SELF_URL / RENDER_EXTERNAL_URL not set. Running in local/standby mode."
         )
         return
 
@@ -175,28 +176,45 @@ async def anti_sleep_keepalive_worker():
         self_url = f"https://{self_url}"
     health_url = f"{self_url}/health"
 
-    logger.info(f"🛡️ Anti-Sleep Engine ACTIVATED! Auto-pinging {health_url} every 3 minutes.")
+    logger.info(f"🛡️ Anti-Sleep Ultra Engine ACTIVATED! Auto-pinging {health_url} every 90s.")
 
+    ping_count = 0
+    connector = aiohttp.TCPConnector(limit=5, keepalive_timeout=30)
     async with aiohttp.ClientSession(
-        timeout=aiohttp.ClientTimeout(total=10)
+        connector=connector,
+        timeout=aiohttp.ClientTimeout(total=10),
+        headers={"User-Agent": "UltraAntiSleep/2.0-KeepAlive"},
     ) as session:
         while True:
             try:
-                await asyncio.sleep(180)  # Ping every 3 minutes (180s)
+                await asyncio.sleep(90)  # Ping every 90s - completely defeats 15-min or 5-min idle timeouts
+                ping_count += 1
                 async with session.get(health_url) as resp:
                     if resp.status == 200:
-                        logger.debug("🛡️ Anti-Sleep keepalive ping successful.")
+                        if ping_count % 10 == 0:  # Log every 15 minutes to avoid cluttering logs
+                            logger.info(
+                                f"🛡️ Anti-Sleep Heartbeat: #{ping_count} successful keepalive pings. Host is hot and awake!"
+                            )
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.debug(f"Anti-sleep ping note: {e}")
+                logger.debug(f"Anti-sleep keepalive ping note: {e}")
 
 
 @app.on_event("startup")
 async def app_startup():
-    # Auto-start bot cluster if tokens exist
-    if config.bot_tokens:
+    auto_start = os.environ.get("AUTO_START_CLUSTER", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    # Auto-start bot cluster if tokens exist and not disabled
+    if config.bot_tokens and auto_start:
         asyncio.create_task(start_cluster_internal())
+    elif config.bot_tokens and not auto_start:
+        logger.info(
+            "Bot cluster auto-start is paused (AUTO_START_CLUSTER=false). Ready to start via Web UI."
+        )
 
     # Launch background anti-sleep keepalive engine
     asyncio.create_task(anti_sleep_keepalive_worker())
