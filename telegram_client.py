@@ -159,23 +159,56 @@ class TelegramClient:
         """
         import uuid
 
+        # Support Telegram 10.1+ Rich Messages (heading1/h1) for extra large, banner-like font
+        if "<h1" in text.lower() or "<h2" in text.lower():
+            input_content = {
+                "rich_message": {
+                    "html": text
+                }
+            }
+        else:
+            input_content = {
+                "message_text": text,
+                "parse_mode": parse_mode,
+                "link_preview_options": {"is_disabled": disable_web_page_preview},
+            }
+
         result = {
             "type": "article",
             "id": str(uuid.uuid4())[:32],
             "title": "Reply",
-            "input_message_content": {
-                "message_text": text,
-                "parse_mode": parse_mode,
-                "link_preview_options": {"is_disabled": disable_web_page_preview},
-            },
+            "input_message_content": input_content,
         }
 
         payload: Dict[str, Any] = {
             "guest_query_id": guest_query_id,
             "result": result,
         }
-        logger.info(f"Dispatching answerGuestQuery (ID: {guest_query_id})")
-        return await self._request("POST", "answerGuestQuery", payload, use_reply_session=True)
+        logger.info(f"Dispatching answerGuestQuery (ID: {guest_query_id}, rich={bool('<h1' in text.lower())})")
+        resp = await self._request("POST", "answerGuestQuery", payload, use_reply_session=True)
+        
+        # Fallback to standard message_text if rich_message was rejected by a server rule
+        if not resp.get("ok") and "rich_message" in input_content:
+            import re
+            logger.warning(f"Rich message rejected ({resp.get('description')}), attempting standard HTML fallback...")
+            fallback_text = re.sub(r"</?h[1-6]>", "\n\n", text).strip()
+            fallback_result = {
+                "type": "article",
+                "id": str(uuid.uuid4())[:32],
+                "title": "Reply",
+                "input_message_content": {
+                    "message_text": f"<b>{fallback_text}</b>",
+                    "parse_mode": "HTML",
+                    "link_preview_options": {"is_disabled": disable_web_page_preview},
+                },
+            }
+            return await self._request(
+                "POST",
+                "answerGuestQuery",
+                {"guest_query_id": guest_query_id, "result": fallback_result},
+                use_reply_session=True,
+            )
+        return resp
 
     async def answer_inline_query(
         self,
@@ -216,6 +249,23 @@ class TelegramClient:
         """
         Standard reply message for groups where the bot is an official member.
         """
+        # If rich headings are present, attempt sendRichMessage first
+        if "<h1" in text.lower() or "<h2" in text.lower():
+            rich_payload: Dict[str, Any] = {
+                "chat_id": chat_id,
+                "rich_message": {"html": text},
+            }
+            if reply_to_message_id:
+                rich_payload["reply_parameters"] = {
+                    "message_id": reply_to_message_id,
+                    "allow_sending_without_reply": True,
+                }
+            rich_resp = await self._request("POST", "sendRichMessage", rich_payload, use_reply_session=True)
+            if rich_resp.get("ok"):
+                return rich_resp
+            import re
+            text = f"<b>{re.sub(r'</?h[1-6]>', '\n\n', text).strip()}</b>"
+
         payload: Dict[str, Any] = {
             "chat_id": chat_id,
             "text": text,
