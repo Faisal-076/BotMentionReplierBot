@@ -30,7 +30,9 @@ class BotConfig:
             "✨ <b>Special alert for {first_name}</b>: Check our updates!",
         )
         self.reply_templates: List[str] = [
-            tmpl.strip() for tmpl in templates_raw.split("|||") if tmpl.strip()
+            tmpl.replace("\\n", "\n").strip()
+            for tmpl in templates_raw.split("|||")
+            if tmpl.strip()
         ]
 
         self.poll_timeout: int = int(os.getenv("POLL_TIMEOUT", "25"))

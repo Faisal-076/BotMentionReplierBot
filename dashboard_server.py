@@ -98,10 +98,14 @@ class ConfigUpdateRequest(BaseModel):
 
 
 def save_env_file(cfg: ConfigUpdateRequest) -> None:
-    """Safely updates the .env file with new settings."""
     env_file = BASE_DIR / ".env"
     tokens_str = ",".join([t.strip() for t in cfg.bot_tokens if t.strip()])
-    templates_str = "|||".join([t.strip() for t in cfg.reply_templates if t.strip()])
+    escaped_templates = [
+        t.replace("\r\n", "\n").replace("\n", "\\n").strip()
+        for t in cfg.reply_templates
+        if t.strip()
+    ]
+    templates_str = "|||".join(escaped_templates)
 
     content = f"""# ================================================================
 # TELEGRAM GUEST & MENTION REPLIER BOT - CONFIGURATION

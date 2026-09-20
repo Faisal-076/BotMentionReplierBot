@@ -60,16 +60,19 @@ class MentionReplier:
             user_tag = html.escape(user_tag)
             chat_title = html.escape(chat_title)
 
-        formatted = template.format(
-            first_name=first_name,
-            last_name=last_name,
-            username=user_tag,
-            user_id=user_id,
-            bot_name=bot_name,
-            bot_username=f"@{bot_username}" if bot_username else "",
-            chat_title=chat_title,
-            date=now_str,
-        )
+        try:
+            formatted = template.format(
+                first_name=first_name,
+                last_name=last_name,
+                username=user_tag,
+                user_id=user_id,
+                bot_name=bot_name,
+                bot_username=f"@{bot_username}" if bot_username else "",
+                chat_title=chat_title,
+                date=now_str,
+            )
+        except Exception:
+            formatted = template
         return formatted
 
     async def handle_guest_message(self, guest_msg: Dict[str, Any]) -> None:
