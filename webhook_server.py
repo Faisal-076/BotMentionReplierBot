@@ -41,7 +41,7 @@ class WebhookManager:
             webhook_url = f"{self.config.webhook_url_base}/webhook/{token_hash}"
             res = await client.set_webhook(
                 url=webhook_url,
-                allowed_updates=["guest_message", "message", "edited_message"],
+                allowed_updates=["guest_message", "message", "edited_message", "inline_query"],
                 drop_pending_updates=False,
             )
             if res.get("ok"):
@@ -85,8 +85,9 @@ async def handle_webhook(token_hash: str, request: Request):
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     replier = manager.repliers[token_hash]
-    # Handle update asynchronously in background
+    # Handle update asynchronously in background with exception logging
     import asyncio
 
-    asyncio.create_task(replier.process_update(update))
+    task = asyncio.create_task(replier.process_update(update))
+    task.add_done_callback(lambda t: logger.error(f"Webhook update error: {t.exception()}") if not t.cancelled() and t.exception() else None)
     return {"ok": True}

@@ -68,8 +68,9 @@ class SingleBotRunner:
                     if update_id is not None:
                         offset = update_id + 1
 
-                    # Process in background task for zero latency
-                    asyncio.create_task(self.replier.process_update(update))
+                    # Process in background task with exception logging
+                    task = asyncio.create_task(self.replier.process_update(update))
+                    task.add_done_callback(lambda t: logger.error(f"Update processing error: {t.exception()}") if not t.cancelled() and t.exception() else None)
 
             except asyncio.CancelledError:
                 logger.info(f"Stopping polling for [@{self.bot_username}]...")

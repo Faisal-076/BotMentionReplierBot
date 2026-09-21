@@ -4,11 +4,13 @@ and triggering Guest Mode (answerGuestQuery) or Member Mode replies.
 """
 
 import asyncio
+from collections import OrderedDict
 from datetime import datetime, timezone
 import html
 import logging
 import random
-from typing import Any, Dict, Optional, Set
+import re
+from typing import Any, Dict, Optional
 from config import BotConfig
 from telegram_client import TelegramClient
 
@@ -19,7 +21,7 @@ class MentionReplier:
     def __init__(self, client: TelegramClient, config: BotConfig):
         self.client = client
         self.config = config
-        self.processed_ids: Set[str] = set()
+        self.processed_ids: OrderedDict = OrderedDict()
         self._cache_limit = 5000
 
     def _track_processed(self, query_id: str) -> bool:
@@ -27,9 +29,10 @@ class MentionReplier:
         if query_id in self.processed_ids:
             return True
         if len(self.processed_ids) >= self._cache_limit:
-            # Clear half of the cache to avoid unbound memory growth
-            self.processed_ids = set(list(self.processed_ids)[self._cache_limit // 2 :])
-        self.processed_ids.add(query_id)
+            # Evict oldest half (FIFO) to avoid unbounded memory growth
+            for _ in range(self._cache_limit // 2):
+                self.processed_ids.popitem(last=False)
+        self.processed_ids[query_id] = None
         return False
 
     def format_reply_text(
@@ -75,13 +78,12 @@ class MentionReplier:
             formatted = template
 
         if self.config.parse_mode.upper() == "HTML":
-            import re
             # Auto-convert Markdown link syntax [text](url) to HTML <a href="url">text</a>
             formatted = re.sub(r"\[([^\]]+)\]\((https?://[^\)]+)\)", r'<a href="\2">\1</a>', formatted)
 
             # Auto Big Font mode: automatically wrap plain text lines in <h1> headings
             if getattr(self.config, "auto_big_font", True):
-                if not re.search(r"</?(?:h[1-6]|b|strong|i|em|code|pre|blockquote)>", formatted, re.IGNORECASE):
+                if not re.search(r"</?(?:h[1-6]|b|strong|i|em|code|pre|blockquote|a)\b", formatted, re.IGNORECASE):
                     lines = [line.strip() for line in formatted.splitlines() if line.strip()]
                     formatted = "\n".join([f"<h1>{line}</h1>" for line in lines])
 
@@ -144,8 +146,6 @@ class MentionReplier:
             )
             # Auto-retry with plain text if formatting/link was rejected
             if any(term in err_desc.lower() for term in ["parse", "entity", "link"]):
-                import re
-
                 logger.info("🔄 Retrying Guest Query with plain text fallback...")
                 plain_text = re.sub(r"<[^>]+>", "", reply_content)
                 retry_res = await self.client.answer_guest_query(

@@ -22,7 +22,10 @@ class BotConfig:
         self.disable_web_page_preview: bool = (
             os.getenv("DISABLE_WEB_PAGE_PREVIEW", "false").lower() in ("true", "1", "yes")
         )
-        self.reply_delay: float = float(os.getenv("REPLY_DELAY", "0.0"))
+        try:
+            self.reply_delay: float = float(os.getenv("REPLY_DELAY", "0.0"))
+        except (ValueError, TypeError):
+            self.reply_delay: float = 0.0
         self.auto_big_font: bool = (
             os.getenv("AUTO_BIG_FONT", "true").lower() in ("true", "1", "yes")
         )
@@ -38,9 +41,15 @@ class BotConfig:
             if tmpl.strip()
         ]
 
-        self.poll_timeout: int = int(os.getenv("POLL_TIMEOUT", "25"))
+        try:
+            self.poll_timeout: int = int(os.getenv("POLL_TIMEOUT", "25"))
+        except (ValueError, TypeError):
+            self.poll_timeout: int = 25
         self.webhook_host: str = os.getenv("WEBHOOK_HOST", "0.0.0.0")
-        self.webhook_port: int = int(os.getenv("WEBHOOK_PORT", "8000"))
+        try:
+            self.webhook_port: int = int(os.getenv("WEBHOOK_PORT", "8000"))
+        except (ValueError, TypeError):
+            self.webhook_port: int = 8000
         self.webhook_url_base: str = os.getenv("WEBHOOK_URL_BASE", "").strip().rstrip("/")
 
     def validate(self) -> None:

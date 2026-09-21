@@ -18,6 +18,7 @@ class TelegramClient:
         self._reply_session: Optional[aiohttp.ClientSession] = None
         self._owns_session = False
         self.bot_info: Optional[Dict[str, Any]] = None
+        self._prewarm_task: Optional[asyncio.Task] = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -48,7 +49,7 @@ class TelegramClient:
                 timeout=aiohttp.ClientTimeout(total=8, connect=2),
             )
             try:
-                asyncio.create_task(self._prewarm_reply_connection())
+                self._prewarm_task = asyncio.create_task(self._prewarm_reply_connection())
             except Exception:
                 pass
         return self._reply_session
@@ -63,6 +64,8 @@ class TelegramClient:
             pass
 
     async def close(self) -> None:
+        if self._prewarm_task and not self._prewarm_task.done():
+            self._prewarm_task.cancel()
         if self._owns_session and self._session and not self._session.closed:
             await self._session.close()
         if self._reply_session and not self._reply_session.closed:

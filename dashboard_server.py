@@ -351,8 +351,9 @@ async def handle_incoming_telegram_webhook(token_hash: str, request: Request):
             raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
     replier, _, _ = state.webhook_repliers[token_hash]
-    # Zero-delay concurrent execution
-    asyncio.create_task(replier.process_update(update))
+    # Zero-delay concurrent execution with exception logging
+    task = asyncio.create_task(replier.process_update(update))
+    task.add_done_callback(lambda t: logger.error(f"Webhook update error: {t.exception()}") if not t.cancelled() and t.exception() else None)
     return {"ok": True}
 
 

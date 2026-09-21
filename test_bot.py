@@ -112,7 +112,7 @@ async def test_member_mention_handling(mock_client, mock_config):
             "chat": {"id": -100999, "title": "Community Chat"},
             "from": {"id": 888, "first_name": "Sakib"},
             "text": "Hey @replier_bot check this out!",
-            "entities": [{"type": "mention", "offset": 4, "length": 12}],
+            "entities": [{"type": "mention", "offset": 4, "length": 13}],
         },
     }
 

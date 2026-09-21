@@ -243,7 +243,7 @@ function renderTemplatesList() {
     .map(
       (tmpl, index) => `
     <div class="template-item">
-      <textarea class="template-textarea" id="tmpl-${index}" onfocus="lastFocusedTextarea = this" oninput="currentConfig.reply_templates[${index}] = this.value">${tmpl}</textarea>
+      <textarea class="template-textarea" id="tmpl-${index}" onfocus="lastFocusedTextarea = this" oninput="currentConfig.reply_templates[${index}] = this.value">${escapeHtml(tmpl)}</textarea>
       <button class="btn btn-danger btn-xs" onclick="deleteTemplate(${index})">✕</button>
     </div>
   `
