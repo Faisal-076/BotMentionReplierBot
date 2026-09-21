@@ -11,14 +11,11 @@ import hashlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 try:
     import orjson
-    from fastapi.responses import ORJSONResponse
-    DEFAULT_RESP_CLASS = ORJSONResponse
 except ImportError:
     orjson = None
-    DEFAULT_RESP_CLASS = JSONResponse
 
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -33,7 +30,6 @@ STATIC_DIR = BASE_DIR / "static"
 
 app = FastAPI(
     title="Telegram Bot Mention Replier Control Center",
-    default_response_class=DEFAULT_RESP_CLASS,
 )
 
 # Ensure static and templates directories exist
