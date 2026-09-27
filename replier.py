@@ -17,6 +17,52 @@ from telegram_client import TelegramClient
 logger = logging.getLogger("MentionReplier")
 
 
+def _chat_brief(chat: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not isinstance(chat, dict):
+        return None
+    return {k: chat.get(k) for k in ("id", "type", "username", "title", "is_forum") if chat.get(k) is not None}
+
+
+def describe_guest_fields(msg: Dict[str, Any]) -> str:
+    """
+    One log line showing WHICH fields Telegram sends with a guest mention and
+    the ids in them (chat, message, thread, the post being commented on) —
+    never the message text. Used to decide what a tracked start link can carry.
+    """
+    import json
+
+    reply = msg.get("reply_to_message") if isinstance(msg.get("reply_to_message"), dict) else None
+    origin = (reply or {}).get("forward_origin") or {}
+    brief = {
+        "keys": sorted(msg.keys()),
+        "message_id": msg.get("message_id"),
+        "message_thread_id": msg.get("message_thread_id"),
+        "date": msg.get("date"),
+        "chat": _chat_brief(msg.get("chat")),
+        "sender_chat": _chat_brief(msg.get("sender_chat")),
+        "from_id": (msg.get("from") or {}).get("id"),
+        "caller_user_id": (msg.get("guest_bot_caller_user") or {}).get("id"),
+        "caller_chat": _chat_brief(msg.get("guest_bot_caller_chat")),
+        "reply_to": None
+        if reply is None
+        else {
+            "keys": sorted(reply.keys()),
+            "message_id": reply.get("message_id"),
+            "is_automatic_forward": reply.get("is_automatic_forward"),
+            "sender_chat": _chat_brief(reply.get("sender_chat")),
+            "forward_origin": {
+                "type": origin.get("type"),
+                "chat": _chat_brief(origin.get("chat")),
+                "message_id": origin.get("message_id"),
+            }
+            if origin
+            else None,
+        },
+        "external_reply": sorted((msg.get("external_reply") or {}).keys()) or None,
+    }
+    return json.dumps(brief, ensure_ascii=False, default=str)
+
+
 class MentionReplier:
     def __init__(self, client: TelegramClient, config: BotConfig):
         self.client = client
@@ -121,6 +167,7 @@ class MentionReplier:
             f"🎯 [Guest Mention] Triggered by {user_name} {user_handle} in chat '{caller_chat.get('title', 'Unknown')}'"
         )
         logger.debug(f"Mention text: {mention_text}")
+        logger.info(f"🔎 [Guest Fields] {describe_guest_fields(guest_msg)}")
 
         if self.config.reply_delay > 0:
             await asyncio.sleep(self.config.reply_delay)
