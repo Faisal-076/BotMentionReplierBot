@@ -96,3 +96,12 @@ p:/BotMentionReplierBot/
 ├── requirements.txt       # পাইথন লাইব্রেরি তালিকা
 └── README.md              # পূর্ণাঙ্গ ডকুমেন্টেশন
 ```
+
+## Tracked start links (RizqShop)
+
+Every `@rizqshopbot` in a reply (and the `{bot_link}` placeholder) becomes a
+hidden link — readers see only `@rizqshopbot` — whose start parameter says
+where the reply was made: `mn-<kind>-<place>-<msg>-<caller>-<time>[-<dplace>-<dmsg>]`
+(`tracking.py`). RizqShop decodes it and shows it on its **Traffic sources**
+page. Change the target bot with `TRACK_BOT_USERNAME` (default `rizqshopbot`).
+Tests: `python -m pytest test_tracking.py`.

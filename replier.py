@@ -13,6 +13,7 @@ import re
 from typing import Any, Dict, Optional
 from config import BotConfig
 from telegram_client import TelegramClient
+from tracking import build_start_payload, link_html, linkify
 
 logger = logging.getLogger("MentionReplier")
 
@@ -85,9 +86,17 @@ class MentionReplier:
         self,
         caller_user: Optional[Dict[str, Any]] = None,
         chat: Optional[Dict[str, Any]] = None,
+        source_msg: Optional[Dict[str, Any]] = None,
     ) -> str:
-        """Picks a random template and substitutes variables."""
+        """
+        Picks a random template and substitutes variables. Every "@rizqshopbot"
+        in the result (and {bot_link}) becomes a hidden tracked start link that
+        tells the shop which chat / post / comment this reply was made in
+        (tracking.py).
+        """
         template = random.choice(self.config.reply_templates)
+        payload = build_start_payload(source_msg, caller_user)
+        logger.info(f"🔗 [Tracked link] start={payload}")
 
         first_name = (caller_user or {}).get("first_name", "Friend")
         last_name = (caller_user or {}).get("last_name", "")
@@ -119,6 +128,7 @@ class MentionReplier:
                 bot_username=f"@{bot_username}" if bot_username else "",
                 chat_title=chat_title,
                 date=now_str,
+                bot_link=link_html(payload),
             )
         except Exception:
             formatted = template
@@ -132,6 +142,9 @@ class MentionReplier:
                 if not re.search(r"</?(?:h[1-6]|b|strong|i|em|code|pre|blockquote|a)\b", formatted, re.IGNORECASE):
                     lines = [line.strip() for line in formatted.splitlines() if line.strip()]
                     formatted = "\n".join([f"<h1>{line}</h1>" for line in lines])
+
+            # Last, so the big-font check above still sees a tag-free template.
+            formatted = linkify(formatted, payload)
 
         return formatted
 
@@ -172,7 +185,7 @@ class MentionReplier:
         if self.config.reply_delay > 0:
             await asyncio.sleep(self.config.reply_delay)
 
-        reply_content = self.format_reply_text(caller_user, caller_chat)
+        reply_content = self.format_reply_text(caller_user, caller_chat, guest_msg)
 
         result = await self.client.answer_guest_query(
             guest_query_id=guest_query_id,
@@ -254,7 +267,7 @@ class MentionReplier:
         if self.config.reply_delay > 0:
             await asyncio.sleep(self.config.reply_delay)
 
-        reply_content = self.format_reply_text(from_user, chat)
+        reply_content = self.format_reply_text(from_user, chat, message)
 
         result = await self.client.send_message(
             chat_id=chat_id,
